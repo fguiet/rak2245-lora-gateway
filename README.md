@@ -1,4 +1,4 @@
-# rak2245_lora_gateway
+# Building a RAK7244 LoRaWAN Gateway
 
 Just somes note I took when building my RAK7244 based LoRaWAN gateway/concentrator.
 
