@@ -57,11 +57,10 @@ function Decoder(bytes, port) {
  *
  *******************************************************************************/
 
-//This sketch can be used with Arduino Pro Micro (Select Board : Sparkfun Pro Micro)
+//This sketch can be used with ESP Dev Module
 
 //Using https://github.com/matthijskooijman/arduino-lmic
 //But https://github.com/mcci-catena/arduino-lmic should be prefered if enough memory is available (See https://www.thethingsnetwork.org/forum/t/overview-of-lorawan-libraries-howto/24692/2)
-//Saving some memory on Arduino, See: https://primalcortex.wordpress.com/tag/ttn/ 
 
 //Wiring used here (same as pro micro) :
 //https://www.thethingsnetwork.org/labs/story/build-the-cheapest-possible-node-yourself
@@ -75,10 +74,8 @@ function Decoder(bytes, port) {
 #include <SoftwareSerial.h>
 #include <TinyGPS.h>
 
-#define ADR_MODE 0
-
 TinyGPS gps;
-SoftwareSerial ss(7, 8); //RX, TX
+SoftwareSerial ss(4, 2); //RX, TX
 
 uint8_t txBuffer[9];
 uint32_t LatitudeBinary, LongitudeBinary;
@@ -99,7 +96,7 @@ static const PROGMEM u1_t NWKSKEY[16] = { 0x07, 0x89, 0xB3, 0xD5, 0xE5, 0x6D, 0x
 //static const u1_t PROGMEM APPSKEY[16] = { 0x56, 0x73, 0x92, 0x17, 0x62, 0xe7, 0x15, 0xec, 0x51, 0x36, 0xe5, 0xf4, 0xb7, 0x5c, 0xe0, 0x26 };
 static const u1_t PROGMEM APPSKEY[16] = { 0xBA, 0x54, 0xC5, 0x0A, 0xB3, 0x2E, 0xCF, 0x27, 0xC3, 0x4D, 0xA1, 0x12, 0x69, 0xF0, 0x3F, 0x14 };
 
-
+bool newData = false;
 
 // LoRaWAN end-device address (DevAddr)
 //static const u4_t DEVADDR = 0x03FF0001 ; // <-- Change this address for every node!
@@ -122,10 +119,10 @@ const unsigned TX_INTERVAL = 10;
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
-    .nss = 6,
+    .nss = 23,
     .rxtx = LMIC_UNUSED_PIN,
     .rst = 5,
-    .dio = {2, 3, 4},
+    .dio = {21, 17, 16}, //0,1,2
 };
 
 void onEvent (ev_t ev) {
@@ -227,9 +224,10 @@ void do_send(osjob_t* j){
     // Check if there is not a current TX/RX job running
     if (LMIC.opmode & OP_TXRXPEND) {
         Serial.println(F("OP_TXRXPEND, not sending"));
-    } else if (gps.hdop() != TinyGPS::GPS_INVALID_HDOP){
+    } else if (gps.hdop() != TinyGPS::GPS_INVALID_HDOP && newData){
         // Prepare upstream data transmission at the next possible time.
         LMIC_setTxData2(1, txBuffer, sizeof(txBuffer), 0);
+        newData = false;
         Serial.println(F("GPS packet queued"));
     }
 
@@ -255,19 +253,15 @@ void do_send(osjob_t* j){
 }
 
 void setup() {
-    Serial.begin(115200);
-    Serial.println(F("Starting"));
+  Serial.begin(115200);
+  Serial.println(F("Starting"));
 
-    ss.begin(9600);
+  ss.begin(9600);
 
-    #ifdef VCC_ENABLE
-    // For Pinoccio Scout boards
-    pinMode(VCC_ENABLE, OUTPUT);
-    digitalWrite(VCC_ENABLE, HIGH);
-    delay(1000);
-    #endif
+  SPI.begin(19, 26, 18, 23);
 
-    // LMIC init
+  
+   // LMIC init
     os_init();
     // Reset the MAC state. Session and pending data transfers will be discarded.
     LMIC_reset();
@@ -323,28 +317,29 @@ void setup() {
     LMIC_selectSubBand(1);
     #endif
 
-    //LMIC_setAdrMode(ADR_MODE);
+    LMIC_setAdrMode(0);
 
     // Disable link check validation
     LMIC_setLinkCheckMode(0);
 
     // TTN uses SF9 for its RX2 window.
     LMIC.dn2Dr = DR_SF9;
+    //LMIC.dn2Dr = DR_SF12;
 
     // Set data rate and transmit power for uplink (note: txpow seems to be ignored by the library)
-    //LMIC_setDrTxpow(DR_SF7,14);
+    LMIC_setDrTxpow(DR_SF7,14);
 
     //Test max = SF12
-    LMIC_setDrTxpow(DR_SF12,14);
+    //LMIC_setDrTxpow(DR_SF11,14);
 
     // Start job
     do_send(&sendjob);
 }
 
 void loop() {
-    os_runloop_once();
-
-  bool newData = false;
+  os_runloop_once();
+  
+  
   unsigned long chars;
   unsigned short sentences, failed;
 
@@ -358,7 +353,7 @@ void loop() {
       if (gps.encode(c)) // Did a new valid sentence come in?
         newData = true;
     }
-  }
+  } 
 
   if (newData)
   {    
@@ -366,26 +361,28 @@ void loop() {
     float flat, flon;
     unsigned long age;
     gps.f_get_position(&flat, &flon, &age);
-    /*Serial.print("LAT=");
+    Serial.print("LAT=");
     Serial.print(flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flat, 10);
     Serial.print(" LON=");
     Serial.print(flon == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flon, 10);
     Serial.print(" SAT=");
     Serial.print(gps.satellites() == TinyGPS::GPS_INVALID_SATELLITES ? 0 : gps.satellites());
     Serial.print(" PREC=");
-    Serial.print(gps.hdop() == TinyGPS::GPS_INVALID_HDOP ? 0 : gps.hdop());  */  
+    Serial.print(gps.hdop() == TinyGPS::GPS_INVALID_HDOP ? 0 : gps.hdop());  
   }
   
-  gps.stats(&chars, &sentences, &failed);
-  /*Serial.print(" CHARS=");
+  /*gps.stats(&chars, &sentences, &failed);
+  Serial.print(" CHARS=");
   Serial.print(chars);
   Serial.print(" SENTENCES=");
   Serial.print(sentences);
   Serial.print(" CSUM ERR=");
-  Serial.println(failed);*/
+  Serial.println(failed);
   if (chars == 0)
-    Serial.println("** No characters received from GPS: check wiring **");
+    Serial.println("** No characters received from GPS: check wiring **");*/
+  
 }
+
 
 static void print_float(float val, float invalid, int len, int prec)
 {
