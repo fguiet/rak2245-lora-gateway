@@ -254,6 +254,7 @@ sudo journalctl -f -n 100 -u chirpstack-gateway-bridge
 7. Using `ChirpStack Gateway Bridge` to forward LoRa message to MQTT
 
 First we need to edit the config file (which is not available by default)
+The config file is located here : `/etc/chirpstack-gateway-bridge/chirpstack-gateway-bridge.toml`
 
 ```bash
 sudo chmod o+rx /etc/chirpstack-gateway-bridge
